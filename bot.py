@@ -19,10 +19,15 @@ import logging
 import io
 import urllib.parse
 
+# تحسينات لـ Render
+os.environ['PYTHONUNBUFFERED'] = '1'
+sys.dont_write_bytecode = True
+
 # تعطيل تحذيرات SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)  
 
-TOKEN = "8301372114:AAEuVy4edg_sFwOikRJqT1qxg4mTweDHct4"
+# التوكن من متغيرات البيئة (آمن أكثر)
+TOKEN = os.environ.get('TOKEN', "8301372114:AAEuVy4edg_sFwOikRJqT1qxg4mTweDHct4")
 ADMIN_IDS = [6848455321, 7375963526]
 
 # ==================== إعدادات البوت ====================
@@ -31,10 +36,9 @@ OWNERS = {
     "ids": [7375963526, 6848455321]
 }
 
-ALLOWED_GROUPS = {}
-GROUPS_FILE = "allowed_groups.json"
-BLOCKED_USERS = set()
-BLOCKED_USERS_FILE = "blocked_users.json"
+# استخدام الذاكرة بدلاً من الملفات لـ Render
+ALLOWED_GROUPS = {}  # سيتم تخزينها في الذاكرة
+BLOCKED_USERS = set()  # سيتم تخزينها في الذاكرة
 
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
@@ -59,42 +63,30 @@ BURST_SIZE = 50
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ==================== دوال المساعدة ====================
+# ==================== دوال المساعدة المعدلة لـ Render ====================
 def load_allowed_groups():
+    """لا حاجة لتحميل من ملف - نستخدم الذاكرة"""
     global ALLOWED_GROUPS
-    try:
-        if os.path.exists(GROUPS_FILE):
-            with open(GROUPS_FILE, 'r') as f:
-                ALLOWED_GROUPS = json.load(f)
-        else:
-            ALLOWED_GROUPS = {}
-        print(f"✅ تم تحميل {len(ALLOWED_GROUPS)} مجموعة مفعلة")
-    except Exception as e:
-        print(f"خطأ في تحميل المجموعات: {e}")
-        ALLOWED_GROUPS = {}
+    print(f"✅ تم تحميل {len(ALLOWED_GROUPS)} مجموعة مفعلة من الذاكرة")
+    return
 
 def save_allowed_groups():
-    try:
-        with open(GROUPS_FILE, 'w') as f:
-            json.dump(ALLOWED_GROUPS, f, indent=4)
-    except Exception as e:
-        print(f"خطأ في حفظ المجموعات: {e}")
+    """لا حاجة للحفظ في ملف - نكتفي بالذاكرة"""
+    global ALLOWED_GROUPS
+    print(f"✅ تم تحديث {len(ALLOWED_GROUPS)} مجموعة في الذاكرة")
+    return
 
 def load_blocked_users():
+    """لا حاجة لتحميل من ملف - نستخدم الذاكرة"""
     global BLOCKED_USERS
-    try:
-        if os.path.exists(BLOCKED_USERS_FILE):
-            with open(BLOCKED_USERS_FILE, 'r') as f:
-                BLOCKED_USERS = set(json.load(f))
-    except:
-        BLOCKED_USERS = set()
+    print(f"✅ تم تحميل {len(BLOCKED_USERS)} مستخدم محظور من الذاكرة")
+    return
 
 def save_blocked_users():
-    try:
-        with open(BLOCKED_USERS_FILE, 'w') as f:
-            json.dump(list(BLOCKED_USERS), f)
-    except:
-        pass
+    """لا حاجة للحفظ في ملف - نكتفي بالذاكرة"""
+    global BLOCKED_USERS
+    print(f"✅ تم تحديث {len(BLOCKED_USERS)} مستخدم محظور في الذاكرة")
+    return
 
 def is_group_allowed(chat_id):
     return str(chat_id) in ALLOWED_GROUPS
@@ -392,7 +384,6 @@ def start(message):
   /groups - عرض المجموعات المفعلة
   /reply [user_id] [رسالة] - رد على مستخدم
   /block_user [user_id] - حظر مستخدم
-  /addgroup_confirm [chat_id] - تأكيد تفعيل مجموعة
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
@@ -834,7 +825,7 @@ def stop_room_command(message):
     except Exception as e:
         bot.reply_to(message, f"❌ خطأ: {str(e)}")
 
-# ==================== أوامر المالكين ====================
+# ==================== أوامر المالكين (معدلة لـ Render) ====================
 
 @bot.message_handler(commands=['addgroup'])
 def add_group_command(message):
@@ -892,7 +883,7 @@ def add_group_command(message):
             "group_title": chat_title,
             "added_by_username": username
         }
-        save_allowed_groups()
+        save_allowed_groups()  # الآن مجرد تحديث للذاكرة
         
         for admin_id in ADMIN_IDS:
             if admin_id != user_id:
@@ -1048,7 +1039,7 @@ def restart_command(message):
     bot.reply_to(message, "🔄 جاري إعادة تشغيل الحسابات...")
     threading.Thread(target=restart_accounts, daemon=True).start()
 
-# ==================== دوال السبام (بدون تغيير) ====================
+# ==================== دوال السبام (بدون أي تغيير - كما هي) ====================
 
 def restart_accounts():
     time.sleep(2)
@@ -1653,7 +1644,7 @@ def StarT_SerVer():
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("🚀 Starting FPI SX TEAM BOT...")
+    print("🚀 Starting FPI SX TEAM BOT on RENDER...")
     print(f"📅 Time: {datetime.now()}")
     print(f"📊 Total accounts: {len(ACCOUNTS)}")
     print("⚡ MAX SPEED MODE ENABLED")
@@ -1663,6 +1654,8 @@ if __name__ == "__main__":
     load_allowed_groups()
     load_blocked_users()
     print(f"👑 Owners: @ZikoB0SS, @noseyrobot")
+    print("=" * 50)
+    print("✅ Bot ready for Render - All data stored in memory")
     print("=" * 50)
     
     bot_thread = threading.Thread(target=run_bot, daemon=True)
