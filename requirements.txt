@@ -1,9 +1,10 @@
 requests
 pyjwt
-protobuf
-flask
+protobuf>=5.27.0
 psutil
 urllib3
 protobuf-decoder
 pycryptodome
-telebot
+pyTelegramBotAPI
+google
+cryptography
