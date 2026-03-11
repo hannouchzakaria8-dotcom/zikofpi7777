@@ -27,7 +27,7 @@ sys.dont_write_bytecode = True
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)  
 
 # التوكن من متغيرات البيئة (آمن أكثر)
-TOKEN = os.environ.get('TOKEN', "8301372114:AAEuVy4edg_sFwOikRJqT1qxg4mTweDHct4")
+TOKEN = os.environ.get('TOKEN', "8114634187:AAGE1c9THsRwbQKIAxmKD6aYeMoYlQzZlqA")
 ADMIN_IDS = [6848455321, 7375963526]
 
 # ==================== إعدادات البوت ====================
