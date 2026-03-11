@@ -528,36 +528,44 @@ def player_info_command(message):
     player_info = get_player_full_info(uid)
     
     if player_info["success"]:
-        # بناء الرد بكل المعلومات المتاحة
+        # تحويل التواريخ
+        create_date = format_timestamp(player_info.get('createat', 0))
+        last_login = format_timestamp(player_info.get('lastlogin', 0))
+        
+        # بناء الرد الأساسي
         info_text = f"""
 📊 جميع معلومات اللاعب
 
-👤 <b>الاسم:</b> {player_info.get('username', 'Unknown')}
+👤 <b>الاسم:</b> {player_info['username']}
 🆔 <b>UID:</b> <code>{uid}</code>
-🌍 <b>المنطقة:</b> {player_info.get('region', 'Unknown')}
-📊 <b>المستوى:</b> {player_info.get('level', 'N/A')}
-❤️ <b>الإعجابات:</b> {player_info.get('like', '0')}
-👤 <b>النوع:</b> {player_info.get('gender', 'Unknown')}
-🎂 <b>العمر:</b> {player_info.get('age', '0')}
-📝 <b>الحالة:</b> {player_info.get('bio', 'لا يوجد')}
-🔑 <b>طريقة الدخول:</b> {player_info.get('login_method', 'Unknown')}
-📅 <b>تاريخ الإنشاء:</b> {player_info.get('account_created', 'Unknown')}
-⏱️ <b>آخر دخول:</b> {player_info.get('last_login', 'Unknown')}
+🌍 <b>المنطقة:</b> {player_info['region']}
+📊 <b>المستوى:</b> {player_info['level']}
+❤️ <b>الإعجابات:</b> {player_info['likes']}
+🏅 <b>الشارات:</b> {player_info['badge_count']}
+✨ <b>الخبرة:</b> {player_info['exp']}
+📝 <b>الحالة:</b> {player_info['bio']}
+📅 <b>تاريخ الإنشاء:</b> {create_date}
+⏱️ <b>آخر دخول:</b> {last_login}
 
-🏆 <b>BR رانك:</b> {player_info.get('br_rank_score', '0')}
-🎯 <b>CS رانك:</b> {player_info.get('cs_rank_score', '0')}
+🎯 <b>BR رانك:</b> النقاط {player_info['br_point']} | النتيجة {player_info['br_score']}
+🎯 <b>CS رانك:</b> النقاط {player_info['cs_point']} | النتيجة {player_info['cs_score']}
 """
         
-        # إضافة معلومات الطقم إذا وجدت
-        if player_info.get('guild_name') and player_info['guild_name'] != 'لا يوجد':
+        # إضافة معلومات الكلان إذا وجد
+        if player_info.get('has_clan'):
             info_text += f"""
 ━━━━━━━━━━━━━━━━━━━━━━
-👥 <b>الطقم:</b> {player_info.get('guild_name', 'لا يوجد')}
-🆔 <b>ID الطقم:</b> <code>{player_info.get('guild_id', '0')}</code>
-📊 <b>مستوى الطقم:</b> {player_info.get('guild_level', '0')}
-👥 <b>عدد الأعضاء:</b> {player_info.get('guild_members', '0')}
-👑 <b>قائد الطقم:</b> {player_info.get('guild_leader', 'Unknown')}
+👥 <b>الكلان:</b> {player_info['clan_name']}
+🆔 <b>ID الكلان:</b> <code>{player_info['clan_id']}</code>
+📊 <b>مستوى الكلان:</b> {player_info['clan_level']}
+👥 <b>عدد الأعضاء:</b> {player_info['clan_members']}
 """
+        
+        # إضافة مدراء الكلان إذا وجدوا
+        if player_info.get('clan_admins'):
+            info_text += f"\n👑 <b>مدراء الكلان:</b>\n"
+            for admin in player_info['clan_admins']:
+                info_text += f"  • {admin['name']} (ID: <code>{admin['id']}</code>) - مستوى {admin['level']}\n"
         
         info_text += f"""
 ━━━━━━━━━━━━━━━━━━━━━━
