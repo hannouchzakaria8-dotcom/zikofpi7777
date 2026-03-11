@@ -26,7 +26,7 @@ sys.dont_write_bytecode = True
 # تعطيل تحذيرات SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)  
 
-# التوكن من متغيرات البيئة (آمن أكثر)
+# قراءة التوكن من متغيرات البيئة
 TOKEN = os.environ.get('TOKEN', "8114634187:AAGE1c9THsRwbQKIAxmKD6aYeMoYlQzZlqA")
 ADMIN_IDS = [6848455321, 7375963526]
 
@@ -36,9 +36,14 @@ OWNERS = {
     "ids": [7375963526, 6848455321]
 }
 
-# استخدام الذاكرة بدلاً من الملفات لـ Render
-ALLOWED_GROUPS = {}  # سيتم تخزينها في الذاكرة
-BLOCKED_USERS = set()  # سيتم تخزينها في الذاكرة
+# روابط الترويج
+GROUP_LINK = "https://t.me/MTX_SX_CHAT_TEAM"
+GROUP_USERNAME = "@MTX_SX_CHAT_TEAM"
+DEV_CHANNEL = "https://t.me/Ziko_Tim"
+DEV_USERNAME = "@Ziko_Tim"
+
+ALLOWED_GROUPS = {}  # في الذاكرة
+BLOCKED_USERS = set()
 
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
@@ -63,27 +68,23 @@ BURST_SIZE = 50
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ==================== دوال المساعدة المعدلة لـ Render ====================
+# ==================== دوال المساعدة ====================
 def load_allowed_groups():
-    """لا حاجة لتحميل من ملف - نستخدم الذاكرة"""
     global ALLOWED_GROUPS
     print(f"✅ تم تحميل {len(ALLOWED_GROUPS)} مجموعة مفعلة من الذاكرة")
     return
 
 def save_allowed_groups():
-    """لا حاجة للحفظ في ملف - نكتفي بالذاكرة"""
     global ALLOWED_GROUPS
     print(f"✅ تم تحديث {len(ALLOWED_GROUPS)} مجموعة في الذاكرة")
     return
 
 def load_blocked_users():
-    """لا حاجة لتحميل من ملف - نستخدم الذاكرة"""
     global BLOCKED_USERS
     print(f"✅ تم تحميل {len(BLOCKED_USERS)} مستخدم محظور من الذاكرة")
     return
 
 def save_blocked_users():
-    """لا حاجة للحفظ في ملف - نكتفي بالذاكرة"""
     global BLOCKED_USERS
     print(f"✅ تم تحديث {len(BLOCKED_USERS)} مستخدم محظور في الذاكرة")
     return
@@ -100,6 +101,36 @@ def is_owner(user_id, username):
     if username and f"@{username}" in OWNERS["usernames"]:
         return True
     return False
+
+def subscription_buttons(is_owner=False):
+    """إنشاء أزرار الاشتراك"""
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    
+    # الزر الإجباري للمجموعة
+    btn_group = types.InlineKeyboardButton("📢 اشترك في مجموعة البوتات", url=GROUP_LINK)
+    markup.add(btn_group)
+    
+    # زر التحقق من الاشتراك
+    btn_check = types.InlineKeyboardButton("✅ تحقق من الاشتراك", callback_data="check_sub")
+    markup.add(btn_check)
+    
+    # إذا كان مستخدم يحاول تفعيل مجموعة (owner)، نضيف زر قناة المطور
+    if is_owner:
+        btn_dev = types.InlineKeyboardButton("👑 قناة المطور", url=DEV_CHANNEL)
+        markup.add(btn_dev)
+    
+    return markup
+
+def check_subscription(user_id):
+    """التحقق من اشتراك المستخدم في المجموعة"""
+    try:
+        chat_member = bot.get_chat_member(GROUP_USERNAME, user_id)
+        if chat_member.status in ['member', 'administrator', 'creator']:
+            return True
+        return False
+    except Exception as e:
+        print(f"خطأ في التحقق من الاشتراك: {e}")
+        return False
 
 def check_user_access(message):
     user_id = message.from_user.id
@@ -131,93 +162,103 @@ def check_user_access(message):
             except:
                 pass
         
-        bot.reply_to(message, "❌ هذه المجموعة غير مفعلة\nللتفعيل تواصل مع المطورين\n👥 @ZikoB0SS | @noseyrobot")
+        bot.reply_to(message, "❌ هذه المجموعة غير مفعلة\nللتفعيل تواصل مع المطورين\n\n👥 @ZikoB0SS | @noseyrobot")
         return False
     
     return True
 
-def get_player_info(uid):
-    """جلب جميع معلومات اللاعب"""
+def check_user_access_with_subscription(message):
+    """التحقق من وصول المستخدم مع الاشتراك الإجباري"""
+    user_id = message.from_user.id
+    
+    if not check_user_access(message):
+        return False
+    
+    # المطورين لا يحتاجون اشتراك
+    if is_owner(user_id, message.from_user.username):
+        return True
+    
+    # التحقق من الاشتراك
+    if not check_subscription(user_id):
+        bot.reply_to(
+            message,
+            f"🔒 <b>عذراً، يجب الاشتراك في مجموعة البوتات أولاً</b>\n\n"
+            f"📢 المجموعة: {GROUP_USERNAME}\n\n"
+            f"بعد الاشتراك اضغط على زر التحقق",
+            reply_markup=subscription_buttons(is_owner=False)
+        )
+        return False
+    
+    return True
+
+def get_player_full_info(uid):
+    """
+    جلب جميع معلومات اللاعب من API foubia-info-ff
+    يعيد كل البيانات المتاحة
+    """
     try:
         url = f"https://foubia-info-ff.vercel.app/{uid}"
         response = requests.get(url, timeout=10)
+        
+        if response.status_code != 200:
+            return {"success": False, "error": f"HTTP {response.status_code}"}
+        
         data = response.json()
         
-        basic = data.get("basicinfo", [{}])[0]
-        
-        player_name = basic.get('username', 'Unknown')
-        player_region = basic.get('region', 'Unknown')
-        player_level = basic.get('level', 'N/A')
-        
-        AVATAR_ID = "902028017"
-        BANNER_ID = "901043008"
-        PIN_ID = "0"
-        PRIME_LEVEL = "1"
-        
-        encoded_name = urllib.parse.quote(player_name)
-        
-        banner_url = (f"https://banner-apibykala-api.vercel.app/profile"
-                      f"?avatar_id={AVATAR_ID}"
-                      f"&banner_id={BANNER_ID}"
-                      f"&pin_id={PIN_ID}"
-                      f"&prime_level={PRIME_LEVEL}"
-                      f"&level={player_level}"
-                      f"&name={encoded_name}")
-        
-        return {
-            "name": player_name,
-            "region": player_region,
-            "level": player_level,
-            "banner_url": banner_url,
-            "success": True
+        # استخراج جميع المعلومات المتاحة
+        result = {
+            "success": True,
+            "raw_data": data  # احتفظ بالبيانات الخام للتوسع مستقبلاً
         }
+        
+        # basicinfo - المعلومات الأساسية
+        if "basicinfo" in data and len(data["basicinfo"]) > 0:
+            basic = data["basicinfo"][0]
+            result["username"] = basic.get('username', 'Unknown')
+            result["uid"] = basic.get('uid', uid)
+            result["region"] = basic.get('region', 'Unknown')
+            result["level"] = basic.get('level', 'N/A')
+            result["like"] = basic.get('like', '0')
+            result["account_created"] = basic.get('account_created', 'Unknown')
+            result["last_login"] = basic.get('last_login', 'Unknown')
+            result["bio"] = basic.get('bio', '')
+            result["login_method"] = basic.get('login_method', 'Unknown')
+            result["gender"] = basic.get('gender', 'Unknown')
+            result["age"] = basic.get('age', '0')
+            result["br_rank_score"] = basic.get('br_rank_score', '0')
+            result["br_rank_point"] = basic.get('br_rank_point', '0')
+            result["cs_rank_score"] = basic.get('cs_rank_score', '0')
+        
+        # guildinfo - معلومات الطقم
+        if "guildinfo" in data and len(data["guildinfo"]) > 0:
+            guild = data["guildinfo"][0]
+            result["guild_name"] = guild.get('guild_name', 'لا يوجد')
+            result["guild_id"] = guild.get('guild_id', '0')
+            result["guild_level"] = guild.get('guild_level', '0')
+            result["guild_members"] = guild.get('guild_members', '0')
+            result["guild_leader"] = guild.get('guild_leader_name', 'Unknown')
+            result["guild_leader_uid"] = guild.get('guild_leader_uid', '0')
+        
+        return result
+        
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": f"Request error: {str(e)}"}
+    except json.JSONDecodeError as e:
+        return {"success": False, "error": f"JSON error: {str(e)}"}
     except Exception as e:
-        print(f"خطأ في جلب معلومات اللاعب: {e}")
-        return {
-            "name": "Unknown",
-            "region": "Unknown",
-            "level": "N/A",
-            "banner_url": None,
-            "success": False
-        }
+        return {"success": False, "error": f"Unexpected error: {str(e)}"}
 
-def check_ban(uid):
-    """فحص الحظر"""
+def check_ban_simple(uid):
+    """فحص الحظر المبسط - بدون صور ولا مدة"""
     try:
-        player_info = get_player_info(uid)
-        player_name = player_info["name"]
-        player_region = player_info["region"]
-        banner_url = player_info["banner_url"]
+        # جلب معلومات اللاعب أولاً
+        player_info = get_player_full_info(uid)
         
-        url = f"https://foubia-ban-check.vercel.app/bancheck?key=xTzPrO&uid={uid}"
-        response = requests.get(url, timeout=10)
-        data = response.json()
-        
-        ban_status = data.get('is_banned', False)
-        ban_period = data.get('ban_period', 0)
-        
-        if ban_status:
-            status_text = "🚫 محظور"
-        else:
-            status_text = "✅ غير محظور"
-        
-        banner_image = None
-        if banner_url:
-            try:
-                banner_response = requests.get(banner_url, timeout=10)
-                if banner_response.status_code == 200:
-                    banner_image = banner_response.content
-            except:
-                pass
-        
-        info_text = f"""
-📊 فحص الحظر
+        if not player_info["success"]:
+            return f"""
+❌ فشل جلب معلومات اللاعب
 
-👤 الاسم: {player_name}
-🆔 UID: <code>{uid}</code>
-🌍 المنطقة: {player_region}
-📌 الحالة: {status_text}
-⏱️ مدة الحظر: {ban_period} يوم
+خطأ: {player_info.get('error', 'Unknown')}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 🔹 /player_info [UID]
@@ -226,26 +267,60 @@ def check_ban(uid):
 🔹 /visit [UID]
 
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """
         
-        return banner_image, info_text
+        # فحص الحظر
+        url = f"https://foubia-ban-check.vercel.app/bancheck?key=xTzPrO&uid={uid}"
+        response = requests.get(url, timeout=10)
+        data = response.json()
+        
+        ban_status = data.get('is_banned', False)
+        
+        if ban_status:
+            status_text = "🚫 محظور"
+        else:
+            status_text = "✅ غير محظور"
+        
+        # بناء الرد المبسط
+        info_text = f"""
+📊 فحص الحظر
+
+👤 الاسم: {player_info.get('username', 'Unknown')}
+🆔 UID: <code>{uid}</code>
+🌍 المنطقة: {player_info.get('region', 'Unknown')}
+📊 المستوى: {player_info.get('level', 'N/A')}
+📌 الحالة: {status_text}
+
+━━━━━━━━━━━━━━━━━━━━━━
+🔹 /player_info [UID]
+🔹 /check [UID]
+🔹 /outfit [UID]
+🔹 /visit [UID]
+
+👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
+"""
+        
+        return info_text
         
     except Exception as e:
-        return None, f"""
+        return f"""
 ❌ خطأ في فحص الحظر
 
 خطأ: {str(e)}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """
 
 def get_outfit(uid):
     """جلب صورة الأوتفيت"""
     try:
-        player_info = get_player_info(uid)
-        player_name = player_info["name"]
-        player_region = player_info["region"]
+        player_info = get_player_full_info(uid)
+        player_name = player_info.get('username', 'Unknown') if player_info.get('success') else 'Unknown'
+        player_region = player_info.get('region', 'Unknown') if player_info.get('success') else 'Unknown'
         
         region = "me"
         outfit_url = f"https://ffoutfitapis.vercel.app/outfit-image?uid={uid}&region={region}&key=99day"
@@ -268,6 +343,7 @@ def get_outfit(uid):
 🔹 /visit [UID]
 
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """
             return response.content, caption
         else:
@@ -276,6 +352,7 @@ def get_outfit(uid):
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """
             
     except Exception as e:
@@ -286,13 +363,14 @@ def get_outfit(uid):
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """
 
 def send_visits_background(uid, chat_id, wait_msg_id):
     """إرسال الزيارات في الخلفية"""
     try:
-        player_info = get_player_info(uid)
-        player_name = player_info["name"]
+        player_info = get_player_full_info(uid)
+        player_name = player_info.get('username', uid) if player_info.get('success') else uid
         
         url = f"https://zikovisit.onrender.com/visit?region=BD&uid={uid}"
         requests.get(url, timeout=5)
@@ -318,23 +396,52 @@ def send_visits_background(uid, chat_id, wait_msg_id):
 🔹 /visit [UID]
 
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """,
             chat_id, wait_msg_id
         )
     except:
         pass
 
+# ==================== معالج الأزرار ====================
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callback(call):
+    if call.data == "check_sub":
+        user_id = call.from_user.id
+        
+        if check_subscription(user_id):
+            bot.answer_callback_query(call.id, "✅ تم التحقق بنجاح! يمكنك استخدام البوت الآن")
+            bot.edit_message_text(
+                "✅ تم التحقق بنجاح!\nأرسل /start أو /help لبدء استخدام البوت",
+                call.message.chat.id,
+                call.message.message_id
+            )
+        else:
+            bot.answer_callback_query(call.id, "❌ لم تشترك بعد! اشترك ثم حاول مرة أخرى")
+
 # ==================== أوامر البوت ====================
 
-@bot.message_handler(commands=['start'])
-def start(message):
+@bot.message_handler(commands=['start', 'help'])
+def start_help_command(message):
     user_id = message.from_user.id
     is_admin = user_id in ADMIN_IDS
     chat_type = message.chat.type
+    chat_id = message.chat.id
     
     if chat_type != 'private':
-        if is_group_allowed(message.chat.id):
-            msg = """
+        if is_group_allowed(chat_id):
+            # التحقق من الاشتراك في المجموعات
+            if not check_subscription(user_id) and not is_admin:
+                bot.reply_to(
+                    message,
+                    f"🔒 <b>عذراً، يجب الاشتراك في مجموعة البوتات أولاً</b>\n\n"
+                    f"📢 المجموعة: {GROUP_USERNAME}\n\n"
+                    f"بعد الاشتراك اضغط على زر التحقق",
+                    reply_markup=subscription_buttons(is_owner=False)
+                )
+                return
+            
+            msg = f"""
 ⚡ 𝑭𝑷𝑰 𝑺𝑿 𝑻𝑬𝑨𝑴 – 𝑪𝒐𝒎𝒎𝒂𝒏𝒅 𝑳𝒊𝒔𝒕 ⚡
 
 📋 الأوامر المتاحة:
@@ -347,19 +454,20 @@ def start(message):
   /stop_room [UID] - إيقاف سبام الروم
 
 • خدمات الاستعلام:
-  /player_info [UID] - معلومات اللاعب
-  /check [UID] - فحص الحظر
+  /player_info [UID] - جميع معلومات اللاعب
+  /check [UID] - فحص الحظر (مبسط)
   /outfit [UID] - صورة الأوتفيت
-  /visit [UID] - إرسال زيارات
+  /visit [UID] - إرسال 1000 زيارة
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """
         else:
-            msg = "❌ هذه المجموعة غير مفعلة\nللتفعيل تواصل مع المطورين\n\n👥 @ZikoB0SS | @noseyrobot"
+            msg = f"❌ هذه المجموعة غير مفعلة\nللتفعيل تواصل مع المطورين\n\n👥 @ZikoB0SS | @noseyrobot\n📢 {GROUP_USERNAME}"
     else:
         if is_admin:
-            msg = """
+            msg = f"""
 ⚡ 𝑭𝑷𝑰 𝑺𝑿 𝑻𝑬𝑨𝑴 – 𝑪𝒐𝒎𝒎𝒂𝒏𝒅 𝑳𝒊𝒔𝒕 ⚡
 
 📋 قائمة أوامر التحكم:
@@ -372,10 +480,10 @@ def start(message):
   /stop_room [UID] - إيقاف سبام الروم
 
 • خدمات الاستعلام:
-  /player_info [UID] - معلومات اللاعب
-  /check [UID] - فحص الحظر
+  /player_info [UID] - جميع معلومات اللاعب
+  /check [UID] - فحص الحظر (مبسط)
   /outfit [UID] - صورة الأوتفيت
-  /visit [UID] - إرسال زيارات
+  /visit [UID] - إرسال 1000 زيارة
 
 • أوامر النظام:
   /restart - إعادة تشغيل الحسابات
@@ -384,46 +492,74 @@ def start(message):
   /groups - عرض المجموعات المفعلة
   /reply [user_id] [رسالة] - رد على مستخدم
   /block_user [user_id] - حظر مستخدم
+  /addgroup_confirm [chat_id] - تأكيد تفعيل مجموعة
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
+👑 {DEV_USERNAME}
 """
         else:
-            msg = """
+            msg = f"""
 🗿 ACCESS
 
 ❌ عذراً، هذا البوت مخصص للمطورين فقط
 
 للتواصل مع المطورين:
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """
     
     bot.reply_to(message, msg)
 
 @bot.message_handler(commands=['player_info'])
 def player_info_command(message):
-    if not check_user_access(message):
+    if not check_user_access_with_subscription(message):
         return
     
     args = message.text.split()
     if len(args) != 2:
-        bot.reply_to(message, "❌ استخدم: /player_info 123456789")
+        bot.reply_to(message, f"❌ استخدم: /player_info 123456789\n\n📢 {GROUP_USERNAME}")
         return
     
     uid = args[1]
-    wait_msg = bot.reply_to(message, f"🔍 جلب معلومات اللاعب {uid}...")
+    wait_msg = bot.reply_to(message, f"🔍 جلب جميع معلومات اللاعب {uid}...")
     
-    player_info = get_player_info(uid)
+    player_info = get_player_full_info(uid)
     
     if player_info["success"]:
+        # بناء الرد بكل المعلومات المتاحة
         info_text = f"""
-📊 معلومات اللاعب
+📊 جميع معلومات اللاعب
 
-👤 الاسم: {player_info['name']}
-🆔 UID: <code>{uid}</code>
-🌍 المنطقة: {player_info['region']}
-📊 المستوى: {player_info['level']}
+👤 <b>الاسم:</b> {player_info.get('username', 'Unknown')}
+🆔 <b>UID:</b> <code>{uid}</code>
+🌍 <b>المنطقة:</b> {player_info.get('region', 'Unknown')}
+📊 <b>المستوى:</b> {player_info.get('level', 'N/A')}
+❤️ <b>الإعجابات:</b> {player_info.get('like', '0')}
+👤 <b>النوع:</b> {player_info.get('gender', 'Unknown')}
+🎂 <b>العمر:</b> {player_info.get('age', '0')}
+📝 <b>الحالة:</b> {player_info.get('bio', 'لا يوجد')}
+🔑 <b>طريقة الدخول:</b> {player_info.get('login_method', 'Unknown')}
+📅 <b>تاريخ الإنشاء:</b> {player_info.get('account_created', 'Unknown')}
+⏱️ <b>آخر دخول:</b> {player_info.get('last_login', 'Unknown')}
 
+🏆 <b>BR رانك:</b> {player_info.get('br_rank_score', '0')}
+🎯 <b>CS رانك:</b> {player_info.get('cs_rank_score', '0')}
+"""
+        
+        # إضافة معلومات الطقم إذا وجدت
+        if player_info.get('guild_name') and player_info['guild_name'] != 'لا يوجد':
+            info_text += f"""
+━━━━━━━━━━━━━━━━━━━━━━
+👥 <b>الطقم:</b> {player_info.get('guild_name', 'لا يوجد')}
+🆔 <b>ID الطقم:</b> <code>{player_info.get('guild_id', '0')}</code>
+📊 <b>مستوى الطقم:</b> {player_info.get('guild_level', '0')}
+👥 <b>عدد الأعضاء:</b> {player_info.get('guild_members', '0')}
+👑 <b>قائد الطقم:</b> {player_info.get('guild_leader', 'Unknown')}
+"""
+        
+        info_text += f"""
 ━━━━━━━━━━━━━━━━━━━━━━
 🔹 /player_info [UID]
 🔹 /check [UID]
@@ -431,44 +567,42 @@ def player_info_command(message):
 🔹 /visit [UID]
 
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """
-        bot.edit_message_text(info_text, chat_id=message.chat.id, message_id=wait_msg.message_id)
+        
+        bot.edit_message_text(info_text, chat_id=message.chat.id, message_id=wait_msg.message_id, parse_mode="HTML")
     else:
-        bot.edit_message_text(f"❌ فشل جلب معلومات اللاعب\n\n👥 @ZikoB0SS | @noseyrobot", chat_id=message.chat.id, message_id=wait_msg.message_id)
+        bot.edit_message_text(
+            f"❌ فشل جلب معلومات اللاعب\n\nخطأ: {player_info.get('error', 'Unknown')}\n\n👥 @ZikoB0SS | @noseyrobot\n📢 {GROUP_USERNAME}",
+            chat_id=message.chat.id,
+            message_id=wait_msg.message_id
+        )
 
 @bot.message_handler(commands=['check'])
 def check_command(message):
-    if not check_user_access(message):
+    if not check_user_access_with_subscription(message):
         return
     
     args = message.text.split()
     if len(args) != 2:
-        bot.reply_to(message, "❌ استخدم: /check 123456789")
+        bot.reply_to(message, f"❌ استخدم: /check 123456789\n\n📢 {GROUP_USERNAME}")
         return
     
     uid = args[1]
     wait_msg = bot.reply_to(message, f"🔍 جاري فحص الحظر للـ UID: {uid}...")
     
-    banner_image, info_text = check_ban(uid)
+    info_text = check_ban_simple(uid)
     
-    if banner_image:
-        photo = io.BytesIO(banner_image)
-        photo.name = f"banner_{uid}.jpg"
-        
-        bot.delete_message(message.chat.id, wait_msg.message_id)
-        bot.send_photo(message.chat.id, photo)
-        bot.send_message(message.chat.id, info_text)
-    else:
-        bot.edit_message_text(info_text, chat_id=message.chat.id, message_id=wait_msg.message_id)
+    bot.edit_message_text(info_text, chat_id=message.chat.id, message_id=wait_msg.message_id, parse_mode="HTML")
 
 @bot.message_handler(commands=['outfit'])
 def outfit_command(message):
-    if not check_user_access(message):
+    if not check_user_access_with_subscription(message):
         return
     
     args = message.text.split()
     if len(args) != 2:
-        bot.reply_to(message, "❌ استخدم: /outfit 123456789")
+        bot.reply_to(message, f"❌ استخدم: /outfit 123456789\n\n📢 {GROUP_USERNAME}")
         return
     
     uid = args[1]
@@ -481,21 +615,25 @@ def outfit_command(message):
             photo = io.BytesIO(outfit_image)
             photo.name = f"outfit_{uid}.jpg"
             bot.delete_message(message.chat.id, wait_msg.message_id)
-            bot.send_photo(message.chat.id, photo, caption=caption)
+            bot.send_photo(message.chat.id, photo, caption=caption, parse_mode="HTML")
         else:
-            bot.edit_message_text(caption, chat_id=message.chat.id, message_id=wait_msg.message_id)
+            bot.edit_message_text(caption, chat_id=message.chat.id, message_id=wait_msg.message_id, parse_mode="HTML")
             
     except Exception as e:
-        bot.edit_message_text(f"❌ خطأ في جلب الأوتفيت\n\n👥 @ZikoB0SS | @noseyrobot", chat_id=message.chat.id, message_id=wait_msg.message_id)
+        bot.edit_message_text(
+            f"❌ خطأ في جلب الأوتفيت\n\n👥 @ZikoB0SS | @noseyrobot\n📢 {GROUP_USERNAME}",
+            chat_id=message.chat.id,
+            message_id=wait_msg.message_id
+        )
 
 @bot.message_handler(commands=['visit'])
 def visit_command(message):
-    if not check_user_access(message):
+    if not check_user_access_with_subscription(message):
         return
     
     args = message.text.split()
     if len(args) != 2:
-        bot.reply_to(message, "❌ استخدم: /visit 123456789")
+        bot.reply_to(message, f"❌ استخدم: /visit 123456789\n\n📢 {GROUP_USERNAME}")
         return
     
     uid = args[1]
@@ -509,6 +647,7 @@ def visit_command(message):
 🌍 المنطقة: ME
 ⏱️ الوقت: 15 ثانية...
 ━━━━━━━━━━━━━━━━━━━━━━
+📢 {GROUP_USERNAME}
 """
     )
     
@@ -521,26 +660,26 @@ def visit_command(message):
 
 @bot.message_handler(commands=['spam'])
 def spam_command(message):
-    if not check_user_access(message):
+    if not check_user_access_with_subscription(message):
         return
     
     args = message.text.split()
     
     try:
         if len(args) != 2:
-            bot.reply_to(message, "❌ صيغة خاطئة\nالاستخدام: /spam [UID]\nالمدة: 30 دقيقة ثابتة")
+            bot.reply_to(message, f"❌ صيغة خاطئة\nالاستخدام: /spam [UID]\nالمدة: 30 دقيقة ثابتة\n\n📢 {GROUP_USERNAME}")
             return
         
         target_id = args[1]
         hours = 0.5  # 30 دقيقة
         
         if not ChEck_Commande(target_id):
-            bot.reply_to(message, "❌ خطأ\nمعرف المستخدم غير صالح")
+            bot.reply_to(message, f"❌ خطأ\nمعرف المستخدم غير صالح\n\n📢 {GROUP_USERNAME}")
             return
         
         with active_spam_lock:
             if target_id in active_spam_targets:
-                bot.reply_to(message, f"⚠️ هذا الحساب في حالة سبام بالفعل")
+                bot.reply_to(message, f"⚠️ هذا الحساب في حالة سبام بالفعل\n\n📢 {GROUP_USERNAME}")
                 return
             
             active_spam_targets[target_id] = {
@@ -571,34 +710,35 @@ def spam_command(message):
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """
             )
             
     except Exception as e:
-        bot.reply_to(message, f"❌ خطأ: {str(e)}")
+        bot.reply_to(message, f"❌ خطأ: {str(e)}\n\n📢 {GROUP_USERNAME}")
 
 @bot.message_handler(commands=['room'])
 def room_command(message):
-    if not check_user_access(message):
+    if not check_user_access_with_subscription(message):
         return
     
     args = message.text.split()
     
     try:
         if len(args) != 2:
-            bot.reply_to(message, "❌ صيغة خاطئة\nالاستخدام: /room [UID]\nالمدة: 30 دقيقة ثابتة")
+            bot.reply_to(message, f"❌ صيغة خاطئة\nالاستخدام: /room [UID]\nالمدة: 30 دقيقة ثابتة\n\n📢 {GROUP_USERNAME}")
             return
         
         target_id = args[1]
         hours = 0.5  # 30 دقيقة
         
         if not ChEck_Commande(target_id):
-            bot.reply_to(message, "❌ خطأ\nمعرف المستخدم غير صالح")
+            bot.reply_to(message, f"❌ خطأ\nمعرف المستخدم غير صالح\n\n📢 {GROUP_USERNAME}")
             return
         
         with active_spam_lock:
             if target_id in active_room_spam_targets:
-                bot.reply_to(message, f"⚠️ هذا الحساب في حالة سبام روم بالفعل")
+                bot.reply_to(message, f"⚠️ هذا الحساب في حالة سبام روم بالفعل\n\n📢 {GROUP_USERNAME}")
                 return
             
             active_room_spam_targets[target_id] = {
@@ -629,22 +769,23 @@ def room_command(message):
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """
             )
             
     except Exception as e:
-        bot.reply_to(message, f"❌ خطأ: {str(e)}")
+        bot.reply_to(message, f"❌ خطأ: {str(e)}\n\n📢 {GROUP_USERNAME}")
 
 @bot.message_handler(commands=['status'])
 def status_command(message):
-    if not check_user_access(message):
+    if not check_user_access_with_subscription(message):
         return
     
     args = message.text.split()
     
     try:
         if len(args) != 2:
-            bot.reply_to(message, "❌ صيغة خاطئة\nالاستخدام: /status [UID]")
+            bot.reply_to(message, f"❌ صيغة خاطئة\nالاستخدام: /status [UID]\n\n📢 {GROUP_USERNAME}")
             return
         
         target_id = args[1]
@@ -677,6 +818,7 @@ def status_command(message):
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """
                             )
                             found = True
@@ -710,33 +852,34 @@ def status_command(message):
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """
                                 )
                                 found = True
         
         if not found:
-            bot.reply_to(message, f"❌ لا يوجد سبام نشط للمعرف <code>{target_id}</code>")
+            bot.reply_to(message, f"❌ لا يوجد سبام نشط للمعرف <code>{target_id}</code>\n\n📢 {GROUP_USERNAME}")
             
     except Exception as e:
-        bot.reply_to(message, f"❌ خطأ: {str(e)}")
+        bot.reply_to(message, f"❌ خطأ: {str(e)}\n\n📢 {GROUP_USERNAME}")
 
 @bot.message_handler(commands=['stop_spam'])
 def stop_spam_command(message):
-    if not check_user_access(message):
+    if not check_user_access_with_subscription(message):
         return
     
     args = message.text.split()
     
     try:
         if len(args) != 2:
-            bot.reply_to(message, "❌ صيغة خاطئة\nالاستخدام: /stop_spam [UID]")
+            bot.reply_to(message, f"❌ صيغة خاطئة\nالاستخدام: /stop_spam [UID]\n\n📢 {GROUP_USERNAME}")
             return
         
         target_id = args[1]
         
         with active_spam_lock:
             if target_id not in active_spam_targets:
-                bot.reply_to(message, f"❌ لا يوجد سبام نشط للمعرف <code>{target_id}</code>")
+                bot.reply_to(message, f"❌ لا يوجد سبام نشط للمعرف <code>{target_id}</code>\n\n📢 {GROUP_USERNAME}")
                 return
             
             with spam_initiators_lock:
@@ -744,7 +887,7 @@ def stop_spam_command(message):
                 if initiator != message.from_user.id and message.from_user.id not in ADMIN_IDS:
                     bot.reply_to(
                         message, 
-                        "⛔ عذراً، لا يمكنك إيقاف هذا السبام. فقط من قام بإضافته يمكنه إيقافه."
+                        f"⛔ عذراً، لا يمكنك إيقاف هذا السبام. فقط من قام بإضافته يمكنه إيقافه.\n\n📢 {GROUP_USERNAME}"
                     )
                     return
                 
@@ -766,22 +909,23 @@ def stop_spam_command(message):
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """
             )
             
     except Exception as e:
-        bot.reply_to(message, f"❌ خطأ: {str(e)}")
+        bot.reply_to(message, f"❌ خطأ: {str(e)}\n\n📢 {GROUP_USERNAME}")
 
 @bot.message_handler(commands=['stop_room'])
 def stop_room_command(message):
-    if not check_user_access(message):
+    if not check_user_access_with_subscription(message):
         return
     
     args = message.text.split()
     
     try:
         if len(args) != 2:
-            bot.reply_to(message, "❌ صيغة خاطئة\nالاستخدام: /stop_room [UID]")
+            bot.reply_to(message, f"❌ صيغة خاطئة\nالاستخدام: /stop_room [UID]\n\n📢 {GROUP_USERNAME}")
             return
         
         target_id = args[1]
@@ -789,7 +933,7 @@ def stop_room_command(message):
         
         with active_spam_lock:
             if target_id not in active_room_spam_targets:
-                bot.reply_to(message, f"❌ لا يوجد سبام روم نشط للمعرف <code>{target_id}</code>")
+                bot.reply_to(message, f"❌ لا يوجد سبام روم نشط للمعرف <code>{target_id}</code>\n\n📢 {GROUP_USERNAME}")
                 return
             
             with spam_initiators_lock:
@@ -797,7 +941,7 @@ def stop_room_command(message):
                 if initiator != message.from_user.id and message.from_user.id not in ADMIN_IDS:
                     bot.reply_to(
                         message, 
-                        "⛔ عذراً، لا يمكنك إيقاف هذا السبام. فقط من قام بإضافته يمكنه إيقافه."
+                        f"⛔ عذراً، لا يمكنك إيقاف هذا السبام. فقط من قام بإضافته يمكنه إيقافه.\n\n📢 {GROUP_USERNAME}"
                     )
                     return
                 
@@ -819,13 +963,14 @@ def stop_room_command(message):
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """
             )
             
     except Exception as e:
-        bot.reply_to(message, f"❌ خطأ: {str(e)}")
+        bot.reply_to(message, f"❌ خطأ: {str(e)}\n\n📢 {GROUP_USERNAME}")
 
-# ==================== أوامر المالكين (معدلة لـ Render) ====================
+# ==================== أوامر المالكين (مع أزرار الترويج) ====================
 
 @bot.message_handler(commands=['addgroup'])
 def add_group_command(message):
@@ -861,14 +1006,23 @@ def add_group_command(message):
             except:
                 pass
         
+        # إرسال رد مع أزرار الترويج
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        btn_group = types.InlineKeyboardButton("📢 مجموعة البوتات", url=GROUP_LINK)
+        btn_dev = types.InlineKeyboardButton("👑 قناة المطور", url=DEV_CHANNEL)
+        markup.add(btn_group, btn_dev)
+        
         bot.reply_to(
             message, 
-            """
+            f"""
 📨 تم إرسال طلبك للمطورين
 
 سيتم مراجعة طلبك والرد عليك قريباً
 للتواصل المباشر: @ZikoB0SS | @noseyrobot
-"""
+
+اشترك في قنواتنا:
+""",
+            reply_markup=markup
         )
         return
     
@@ -883,7 +1037,7 @@ def add_group_command(message):
             "group_title": chat_title,
             "added_by_username": username
         }
-        save_allowed_groups()  # الآن مجرد تحديث للذاكرة
+        save_allowed_groups()
         
         for admin_id in ADMIN_IDS:
             if admin_id != user_id:
@@ -903,7 +1057,7 @@ def add_group_command(message):
                 except:
                     pass
         
-        bot.send_message(chat_id, "✅ تم تفعيل البوت في هذه المجموعة!")
+        bot.send_message(chat_id, f"✅ تم تفعيل البوت في هذه المجموعة!\n📢 {GROUP_USERNAME}")
 
 @bot.message_handler(commands=['removegroup'])
 def remove_group_command(message):
@@ -923,7 +1077,7 @@ def remove_group_command(message):
     if str(chat_id) in ALLOWED_GROUPS:
         del ALLOWED_GROUPS[str(chat_id)]
         save_allowed_groups()
-        bot.send_message(chat_id, "✅ تم تعطيل البوت في هذه المجموعة!")
+        bot.send_message(chat_id, f"✅ تم تعطيل البوت في هذه المجموعة!\n📢 {GROUP_USERNAME}")
 
 @bot.message_handler(commands=['groups'])
 def list_groups_command(message):
@@ -934,14 +1088,14 @@ def list_groups_command(message):
         return
     
     if not ALLOWED_GROUPS:
-        bot.send_message(message.chat.id, "📋 لا توجد مجموعات مفعلة.\n\n👥 @ZikoB0SS | @noseyrobot")
+        bot.send_message(message.chat.id, f"📋 لا توجد مجموعات مفعلة.\n\n👥 @ZikoB0SS | @noseyrobot\n📢 {GROUP_USERNAME}")
         return
     
     text = "📋 المجموعات المفعلة\n\n"
     for group_id, group_info in ALLOWED_GROUPS.items():
         text += f"📌 {group_info['group_title']}\n🆔 <code>{group_id}</code>\n\n"
     
-    text += "━━━━━━━━━━━━━━━━━━━━━━\n👥 @ZikoB0SS | @noseyrobot"
+    text += f"━━━━━━━━━━━━━━━━━━━━━━\n👥 @ZikoB0SS | @noseyrobot\n📢 {GROUP_USERNAME}"
     bot.send_message(message.chat.id, text)
 
 @bot.message_handler(commands=['reply'])
@@ -968,6 +1122,7 @@ def reply_to_user(message):
 
 ━━━━━━━━━━━━━━━━━━━━━━
 للتواصل: @ZikoB0SS | @noseyrobot
+📢 {GROUP_USERNAME}
 """
         )
         bot.reply_to(message, f"✅ تم إرسال الرد إلى {target_user}")
@@ -1020,7 +1175,7 @@ def addgroup_confirm(message):
         try:
             bot.send_message(
                 chat_id,
-                "✅ تم تفعيل البوت في هذه المجموعة!\nأهلاً بكم في بوت الخدمات"
+                f"✅ تم تفعيل البوت في هذه المجموعة!\nأهلاً بكم في بوت الخدمات\n📢 {GROUP_USERNAME}"
             )
         except:
             pass
@@ -1039,7 +1194,7 @@ def restart_command(message):
     bot.reply_to(message, "🔄 جاري إعادة تشغيل الحسابات...")
     threading.Thread(target=restart_accounts, daemon=True).start()
 
-# ==================== دوال السبام (بدون أي تغيير - كما هي) ====================
+# ==================== دوال السبام (بدون تغيير) ====================
 
 def restart_accounts():
     time.sleep(2)
@@ -1654,11 +1809,16 @@ if __name__ == "__main__":
     load_allowed_groups()
     load_blocked_users()
     print(f"👑 Owners: @ZikoB0SS, @noseyrobot")
+    print(f"📢 Group: {GROUP_USERNAME}")
+    print(f"👑 Channel: {DEV_USERNAME}")
     print("=" * 50)
     print("✅ Bot ready for Render - All data stored in memory")
     print("=" * 50)
     
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
+    # تشغيل حسابات اللعبة في خيط منفصل
+    game_thread = threading.Thread(target=StarT_SerVer, daemon=True)
+    game_thread.start()
     
-    StarT_SerVer()
+    # تشغيل البوت في الخيط الرئيسي
+    print("🤖 Starting Telegram bot...")
+    bot.infinity_polling(timeout=60, long_polling_timeout=60)
