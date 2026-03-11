@@ -102,6 +102,15 @@ def is_owner(user_id, username):
         return True
     return False
 
+def format_timestamp(timestamp):
+    """تحويل التوقيت إلى تاريخ readable"""
+    if not timestamp or timestamp == 0:
+        return "غير معروف"
+    try:
+        return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+    except:
+        return str(timestamp)
+
 def subscription_buttons(is_owner=False):
     """إنشاء أزرار الاشتراك"""
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -194,7 +203,6 @@ def check_user_access_with_subscription(message):
 def get_player_full_info(uid):
     """
     جلب جميع معلومات اللاعب من API foubia-info-ff
-    يعيد كل البيانات المتاحة
     """
     try:
         url = f"https://foubia-info-ff.vercel.app/{uid}"
@@ -205,48 +213,67 @@ def get_player_full_info(uid):
         
         data = response.json()
         
-        # استخراج جميع المعلومات المتاحة
+        if "basicinfo" not in data or len(data["basicinfo"]) == 0:
+            return {"success": False, "error": "لا توجد معلومات للاعب"}
+        
+        basic = data["basicinfo"][0]
+        
+        # بناء الرد بكل المعلومات
         result = {
             "success": True,
-            "raw_data": data  # احتفظ بالبيانات الخام للتوسع مستقبلاً
+            # المعلومات الأساسية
+            "username": basic.get('username', 'Unknown'),
+            "region": basic.get('region', 'Unknown'),
+            "level": basic.get('level', 'N/A'),
+            "likes": basic.get('likes', '0'),
+            "badge_count": basic.get('BadgeCount', '0'),
+            "exp": basic.get('Exp', '0'),
+            "bio": basic.get('bio', 'لا يوجد'),
+            "avatar": basic.get('avatar', '0'),
+            "banner": basic.get('banner', '0'),
+            "ob_version": basic.get('OB', 'Unknown'),
+            
+            # التواريخ
+            "createat": basic.get('createat', 0),
+            "lastlogin": basic.get('lastlogin', 0),
+            
+            # الرانكات
+            "br_point": basic.get('brrankpoint', '0'),
+            "br_score": basic.get('brrankscore', '0'),
+            "cs_point": basic.get('csrankpoint', '0'),
+            "cs_score": basic.get('csrankscore', '0'),
+            
+            # معلومات الكلان
+            "has_clan": False
         }
         
-        # basicinfo - المعلومات الأساسية
-        if "basicinfo" in data and len(data["basicinfo"]) > 0:
-            basic = data["basicinfo"][0]
-            result["username"] = basic.get('username', 'Unknown')
-            result["uid"] = basic.get('uid', uid)
-            result["region"] = basic.get('region', 'Unknown')
-            result["level"] = basic.get('level', 'N/A')
-            result["like"] = basic.get('like', '0')
-            result["account_created"] = basic.get('account_created', 'Unknown')
-            result["last_login"] = basic.get('last_login', 'Unknown')
-            result["bio"] = basic.get('bio', '')
-            result["login_method"] = basic.get('login_method', 'Unknown')
-            result["gender"] = basic.get('gender', 'Unknown')
-            result["age"] = basic.get('age', '0')
-            result["br_rank_score"] = basic.get('br_rank_score', '0')
-            result["br_rank_point"] = basic.get('br_rank_point', '0')
-            result["cs_rank_score"] = basic.get('cs_rank_score', '0')
+        # إضافة معلومات الكلان إذا وجدت
+        if "claninfo" in data and len(data["claninfo"]) > 0:
+            clan = data["claninfo"][0]
+            result["has_clan"] = True
+            result["clan_name"] = clan.get('clanname', 'لا يوجد')
+            result["clan_id"] = clan.get('clanid', '0')
+            result["clan_level"] = clan.get('guildlevel', '0')
+            result["clan_members"] = clan.get('livemember', '0')
         
-        # guildinfo - معلومات الطقم
-        if "guildinfo" in data and len(data["guildinfo"]) > 0:
-            guild = data["guildinfo"][0]
-            result["guild_name"] = guild.get('guild_name', 'لا يوجد')
-            result["guild_id"] = guild.get('guild_id', '0')
-            result["guild_level"] = guild.get('guild_level', '0')
-            result["guild_members"] = guild.get('guild_members', '0')
-            result["guild_leader"] = guild.get('guild_leader_name', 'Unknown')
-            result["guild_leader_uid"] = guild.get('guild_leader_uid', '0')
+        # إضافة مدراء الكلان إذا وجدوا
+        if "clanadmin" in data and len(data["clanadmin"]) > 0:
+            result["clan_admins"] = []
+            for admin in data["clanadmin"]:
+                result["clan_admins"].append({
+                    "name": admin.get('adminname', 'Unknown'),
+                    "id": admin.get('idadmin', '0'),
+                    "level": admin.get('level', '0')
+                })
         
         return result
         
     except requests.exceptions.RequestException as e:
-        return {"success": False, "error": f"Request error: {str(e)}"}
+        return {"success": False, "error": f"خطأ في الاتصال: {str(e)}"}
     except json.JSONDecodeError as e:
-        return {"success": False, "error": f"JSON error: {str(e)}"}
+        return {"success": False, "error": f"خطأ في قراءة البيانات: {str(e)}"}
     except Exception as e:
-        return {"success": False, "error": f"Unexpected error: {str(e)}"}
+        return {"success": False, "error": f"خطأ غير متوقع: {str(e)}"}
 
 def check_ban_simple(uid):
     """فحص الحظر المبسط - بدون صور ولا مدة"""
@@ -286,11 +313,11 @@ def check_ban_simple(uid):
         info_text = f"""
 📊 فحص الحظر
 
-👤 الاسم: {player_info.get('username', 'Unknown')}
-🆔 UID: <code>{uid}</code>
-🌍 المنطقة: {player_info.get('region', 'Unknown')}
-📊 المستوى: {player_info.get('level', 'N/A')}
-📌 الحالة: {status_text}
+👤 <b>الاسم:</b> {player_info.get('username', 'Unknown')}
+🆔 <b>UID:</b> <code>{uid}</code>
+🌍 <b>المنطقة:</b> {player_info.get('region', 'Unknown')}
+📊 <b>المستوى:</b> {player_info.get('level', 'N/A')}
+📌 <b>الحالة:</b> {status_text}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 🔹 /player_info [UID]
@@ -332,9 +359,9 @@ def get_outfit(uid):
             caption = f"""
 👕 صورة الأوتفيت
 
-👤 الاسم: {player_name}
-🆔 UID: <code>{uid}</code>
-🌍 المنطقة: {player_region}
+👤 <b>الاسم:</b> {player_name}
+🆔 <b>UID:</b> <code>{uid}</code>
+🌍 <b>المنطقة:</b> {player_region}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 🔹 /player_info [UID]
@@ -384,10 +411,10 @@ def send_visits_background(uid, chat_id, wait_msg_id):
             f"""
 ✅ تم إرسال الزيارات
 
-👤 الاسم: {player_name}
-🆔 UID: <code>{uid}</code>
-🌍 المنطقة: ME
-📊 العدد: 1000 زيارة
+👤 <b>الاسم:</b> {player_name}
+🆔 <b>UID:</b> <code>{uid}</code>
+🌍 <b>المنطقة:</b> ME
+📊 <b>العدد:</b> 1000 زيارة
 
 ━━━━━━━━━━━━━━━━━━━━━━
 🔹 /player_info [UID]
@@ -398,7 +425,8 @@ def send_visits_background(uid, chat_id, wait_msg_id):
 👥 @ZikoB0SS | @noseyrobot
 📢 {GROUP_USERNAME}
 """,
-            chat_id, wait_msg_id
+            chat_id, wait_msg_id,
+            parse_mode="HTML"
         )
     except:
         pass
@@ -510,7 +538,7 @@ def start_help_command(message):
 📢 {GROUP_USERNAME}
 """
     
-    bot.reply_to(message, msg)
+    bot.reply_to(message, msg, parse_mode="HTML")
 
 @bot.message_handler(commands=['player_info'])
 def player_info_command(message):
@@ -651,12 +679,13 @@ def visit_command(message):
         f"""
 📤 جاري إرسال الزيارات
 
-🆔 UID: <code>{uid}</code>
-🌍 المنطقة: ME
-⏱️ الوقت: 15 ثانية...
+🆔 <b>UID:</b> <code>{uid}</code>
+🌍 <b>المنطقة:</b> ME
+⏱️ <b>الوقت:</b> 15 ثانية...
 ━━━━━━━━━━━━━━━━━━━━━━
 📢 {GROUP_USERNAME}
-"""
+""",
+        parse_mode="HTML"
     )
     
     thread = threading.Thread(
@@ -711,15 +740,16 @@ def spam_command(message):
                 f"""
 ✅ تم بدء السبام بنجاح
 
-🎯 الهدف: <code>{target_id}</code>
-⏱️ المدة: 30 دقيقة
-⚡ السرعة: قصوى
-👥 الحسابات: {len(connected_clients)}
+🎯 <b>الهدف:</b> <code>{target_id}</code>
+⏱️ <b>المدة:</b> 30 دقيقة
+⚡ <b>السرعة:</b> قصوى
+👥 <b>الحسابات:</b> {len(connected_clients)}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
 📢 {GROUP_USERNAME}
-"""
+""",
+                parse_mode="HTML"
             )
             
     except Exception as e:
@@ -770,15 +800,16 @@ def room_command(message):
                 f"""
 ✅ تم بدء سبام الروم بنجاح
 
-🎯 الهدف: <code>{target_id}</code>
-⏱️ المدة: 30 دقيقة
-⚡ السرعة: قصوى
-👥 الحسابات: {len(connected_clients)}
+🎯 <b>الهدف:</b> <code>{target_id}</code>
+⏱️ <b>المدة:</b> 30 دقيقة
+⚡ <b>السرعة:</b> قصوى
+👥 <b>الحسابات:</b> {len(connected_clients)}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
 📢 {GROUP_USERNAME}
-"""
+""",
+                parse_mode="HTML"
             )
             
     except Exception as e:
@@ -818,16 +849,17 @@ def status_command(message):
                                 f"""
 📊 حالة السبام
 
-🎯 الهدف: <code>{target_id}</code>
-📌 النوع: سبام عادي
-👥 الحسابات: {len(connected_clients)}
-⏱️ الوقت المتبقي: {minutes} دقيقة {seconds} ثانية
-👤 المنشئ: <code>{active_spam_targets[target_id]['initiator']}</code>
+🎯 <b>الهدف:</b> <code>{target_id}</code>
+📌 <b>النوع:</b> سبام عادي
+👥 <b>الحسابات:</b> {len(connected_clients)}
+⏱️ <b>الوقت المتبقي:</b> {minutes} دقيقة {seconds} ثانية
+👤 <b>المنشئ:</b> <code>{active_spam_targets[target_id]['initiator']}</code>
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
 📢 {GROUP_USERNAME}
-"""
+""",
+                                parse_mode="HTML"
                             )
                             found = True
         
@@ -852,21 +884,22 @@ def status_command(message):
                                     f"""
 📊 حالة السبام
 
-🎯 الهدف: <code>{target_id}</code>
-📌 النوع: سبام روم
-👥 الحسابات: {len(connected_clients)}
-⏱️ الوقت المتبقي: {minutes} دقيقة {seconds} ثانية
-👤 المنشئ: <code>{active_room_spam_targets[target_id]['initiator']}</code>
+🎯 <b>الهدف:</b> <code>{target_id}</code>
+📌 <b>النوع:</b> سبام روم
+👥 <b>الحسابات:</b> {len(connected_clients)}
+⏱️ <b>الوقت المتبقي:</b> {minutes} دقيقة {seconds} ثانية
+👤 <b>المنشئ:</b> <code>{active_room_spam_targets[target_id]['initiator']}</code>
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
 📢 {GROUP_USERNAME}
-"""
+""",
+                                    parse_mode="HTML"
                                 )
                                 found = True
         
         if not found:
-            bot.reply_to(message, f"❌ لا يوجد سبام نشط للمعرف <code>{target_id}</code>\n\n📢 {GROUP_USERNAME}")
+            bot.reply_to(message, f"❌ لا يوجد سبام نشط للمعرف <code>{target_id}</code>\n\n📢 {GROUP_USERNAME}", parse_mode="HTML")
             
     except Exception as e:
         bot.reply_to(message, f"❌ خطأ: {str(e)}\n\n📢 {GROUP_USERNAME}")
@@ -887,7 +920,7 @@ def stop_spam_command(message):
         
         with active_spam_lock:
             if target_id not in active_spam_targets:
-                bot.reply_to(message, f"❌ لا يوجد سبام نشط للمعرف <code>{target_id}</code>\n\n📢 {GROUP_USERNAME}")
+                bot.reply_to(message, f"❌ لا يوجد سبام نشط للمعرف <code>{target_id}</code>\n\n📢 {GROUP_USERNAME}", parse_mode="HTML")
                 return
             
             with spam_initiators_lock:
@@ -913,12 +946,13 @@ def stop_spam_command(message):
                 f"""
 ✅ تم إيقاف السبام
 
-🎯 الهدف: <code>{target_id}</code>
+🎯 <b>الهدف:</b> <code>{target_id}</code>
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
 📢 {GROUP_USERNAME}
-"""
+""",
+                parse_mode="HTML"
             )
             
     except Exception as e:
@@ -941,7 +975,7 @@ def stop_room_command(message):
         
         with active_spam_lock:
             if target_id not in active_room_spam_targets:
-                bot.reply_to(message, f"❌ لا يوجد سبام روم نشط للمعرف <code>{target_id}</code>\n\n📢 {GROUP_USERNAME}")
+                bot.reply_to(message, f"❌ لا يوجد سبام روم نشط للمعرف <code>{target_id}</code>\n\n📢 {GROUP_USERNAME}", parse_mode="HTML")
                 return
             
             with spam_initiators_lock:
@@ -967,12 +1001,13 @@ def stop_room_command(message):
                 f"""
 ✅ تم إيقاف سبام الروم
 
-🎯 الهدف: <code>{target_id}</code>
+🎯 <b>الهدف:</b> <code>{target_id}</code>
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 @ZikoB0SS | @noseyrobot
 📢 {GROUP_USERNAME}
-"""
+""",
+                parse_mode="HTML"
             )
             
     except Exception as e:
@@ -1104,7 +1139,7 @@ def list_groups_command(message):
         text += f"📌 {group_info['group_title']}\n🆔 <code>{group_id}</code>\n\n"
     
     text += f"━━━━━━━━━━━━━━━━━━━━━━\n👥 @ZikoB0SS | @noseyrobot\n📢 {GROUP_USERNAME}"
-    bot.send_message(message.chat.id, text)
+    bot.send_message(message.chat.id, text, parse_mode="HTML")
 
 @bot.message_handler(commands=['reply'])
 def reply_to_user(message):
